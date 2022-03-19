@@ -5,6 +5,13 @@
 #include <sys/time.h>
 #include <sys/utsname.h>
 
+struct command {
+  char *command;
+  char *usage;
+  char *description;
+  discord_ev_message callback;
+};
+
 char *avatar_url;
 
 struct timeval start;
@@ -76,6 +83,61 @@ void on_status(struct discord *client, const struct discord_message *msg) {
   discord_create_message(client, msg->channel_id, &params, NULL);
 }
 
+static const struct command commands[] = {
+    {.command = "ping", .description = "Send pong", .callback = &on_ping},
+    {.command = "echo",
+     .usage = "<text>",
+     .description = "Display given text",
+     .callback = &on_echo},
+    {.command = "status",
+     .description = "Get status of bot",
+     .callback = &on_status},
+};
+static const size_t commands_size = sizeof(commands) / sizeof(struct command);
+
+static char *help_content = NULL;
+
+void on_help(struct discord *client, const struct discord_message *msg) {
+  if (msg->author->bot) return;
+
+  if (!help_content) {
+    // Precompute size of content
+    size_t size = 0;
+    for (size_t i = 0; i < commands_size; i++) {
+      // Add 5 to account for extra characters
+      size += strlen(commands[i].command) + strlen(commands[i].description) + 5;
+      if (commands[i].usage) {
+        // Add 1 to account for extra space
+        size += strlen(commands[i].usage) + 1;
+      }
+    }
+
+    help_content = malloc(size + 1);
+    size_t pos = 0;
+    for (size_t i = 0; i < commands_size; i++) {
+      if (commands[i].usage) {
+        pos += sprintf(&help_content[pos], "`%s %s`: %s\n", commands[i].command,
+                       commands[i].usage, commands[i].description);
+      } else {
+        pos += sprintf(&help_content[pos], "`%s`: %s\n", commands[i].command,
+                       commands[i].description);
+      }
+    }
+    assert(size == pos);
+    log_trace("Generated help content");
+  }
+
+  struct discord_create_message params = {.content = help_content};
+  discord_create_message(client, msg->channel_id, &params, NULL);
+}
+
+void set_commands(struct discord *client) {
+  for (size_t i = 0; i < commands_size; i++) {
+    discord_set_on_command(client, commands[i].command, commands[i].callback);
+  }
+  discord_set_on_command(client, "help", &on_help);
+}
+
 int main(int argc, char *argv[]) {
   ccord_global_init();
 
@@ -86,9 +148,8 @@ int main(int argc, char *argv[]) {
   gettimeofday(&start, NULL);
 
   discord_set_on_ready(client, &on_ready);
-  discord_set_on_command(client, "ping", &on_ping);
-  discord_set_on_command(client, "echo", &on_echo);
-  discord_set_on_command(client, "status", &on_status);
+
+  set_commands(client);
 
   const struct discord_user *bot = discord_get_self(client);
   avatar_url = fetch_avatar_url(avatar_url, bot->id, bot->avatar);
@@ -101,4 +162,6 @@ int main(int argc, char *argv[]) {
 
   discord_cleanup(client);
   ccord_global_cleanup();
+  free(avatar_url);
+  free(help_content);
 }
