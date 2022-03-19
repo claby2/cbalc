@@ -1,12 +1,29 @@
 CC ?= gcc
 
-CFLAGS += -pthread -Wall -Wpedantic -Wextra
+SRCDIR := src
+OBJDIR := obj
+
+SOURCES := $(wildcard $(SRCDIR)/*.c)
+OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SOURCES))
+
+CFLAGS += -pthread -Wall -Wpedantic -Wextra -I$(SRCDIR)
 LDFLAGS += -ldiscord -lcurl
 
-cbalc: %: %.c
-	$(CC) $(CFLAGS) -o $@ $< -ldiscord $(LDFLAGS)
+default: cbalc
+
+$(OBJDIR)/%.o: $(SRCDIR)/%.c
+	mkdir -p $(OBJDIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+cbalc: $(OBJECTS) $(SRCDIR)/bin/main.c
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 clean:
-	rm -rf cbalc
+	rm -f cbalc
+	rm -rf $(OBJDIR)
 
-.PHONY: clean
+echo:
+	@ echo SOURCES: $(SOURCES)
+	@ echo OBJECTS: $(OBJECTS)
+
+.PHONY: cbalc clean echo

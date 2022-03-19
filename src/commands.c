@@ -1,9 +1,7 @@
 #include <assert.h>
 #include <concord/discord.h>
-#include <inttypes.h>
-#include <stdio.h>
-#include <sys/time.h>
-#include <sys/utsname.h>
+
+#include "commands.h"
 
 struct command {
   char *command;
@@ -12,12 +10,17 @@ struct command {
   discord_ev_message callback;
 };
 
-char *avatar_url;
+// Data that should be precomputed
+struct data {
+  char *avatar_url;
+  char start_time[13];
+  char system_info[_UTSNAME_SYSNAME_LENGTH + _UTSNAME_RELEASE_LENGTH];
+};
 
-struct timeval start;
+struct data command_data;
+static char *help_content = NULL;
 
-char system_info[_UTSNAME_SYSNAME_LENGTH + _UTSNAME_RELEASE_LENGTH];
-
+// Compose url to avatar image
 char *fetch_avatar_url(char *url, const u64snowflake id, const char *avatar) {
   static const char avatar_base_url[] = "https://cdn.discordapp.com/avatars/";
   char id_buf[22];
@@ -31,9 +34,20 @@ char *fetch_avatar_url(char *url, const u64snowflake id, const char *avatar) {
   return url;
 }
 
-void on_ready(struct discord *client) {
-  const struct discord_user *bot = discord_get_self(client);
-  log_info("Connected to Discord as %s#%s", bot->username, bot->discriminator);
+// Precompute global command data
+void commands_data_init(const struct discord_user *bot) {
+  command_data.avatar_url =
+      fetch_avatar_url(command_data.avatar_url, bot->id, bot->avatar);
+
+  struct utsname uname_data;
+  uname(&uname_data);
+  sprintf(command_data.system_info, "%s %s", uname_data.sysname,
+          uname_data.release);
+
+  struct timeval start;
+  gettimeofday(&start, NULL);
+  strftime(command_data.start_time, sizeof(command_data.start_time),
+           "%b %d %H:%M", localtime(&start.tv_sec));
 }
 
 void on_ping(struct discord *client, const struct discord_message *msg) {
@@ -46,25 +60,25 @@ void on_ping(struct discord *client, const struct discord_message *msg) {
 void on_echo(struct discord *client, const struct discord_message *msg) {
   if (msg->author->bot) return;
 
-  struct discord_create_message params = {.content = msg->content};
+  struct discord_create_message params = {
+      .content =
+          // Set message content to given message content (not including prefix)
+      msg->content};
   discord_create_message(client, msg->channel_id, &params, NULL);
 }
 
 void on_status(struct discord *client, const struct discord_message *msg) {
   if (msg->author->bot) return;
 
-  char start_time[13];
-  strftime(start_time, sizeof(start_time), "%b %d %H:%M",
-           localtime(&start.tv_sec));
-
+  // Define embed fields
   struct discord_embed_field fields[] = {
-      {.name = "System", .value = system_info},
-      {.name = "Start Time", .value = start_time},
+      {.name = "System", .value = command_data.system_info},
+      {.name = "Start Time", .value = command_data.start_time},
   };
 
   struct discord_embed embeds[] = {{
       .title = "cbalc Status",
-      .image = &(struct discord_embed_image){.url = avatar_url},
+      .image = &(struct discord_embed_image){.url = command_data.avatar_url},
       .fields =
           &(struct discord_embed_fields){
               .size = sizeof(fields) / sizeof *fields,
@@ -83,7 +97,7 @@ void on_status(struct discord *client, const struct discord_message *msg) {
   discord_create_message(client, msg->channel_id, &params, NULL);
 }
 
-static const struct command commands[] = {
+const struct command commands[] = {
     {.command = "ping", .description = "Send pong", .callback = &on_ping},
     {.command = "echo",
      .usage = "<text>",
@@ -93,13 +107,13 @@ static const struct command commands[] = {
      .description = "Get status of bot",
      .callback = &on_status},
 };
-static const size_t commands_size = sizeof(commands) / sizeof(struct command);
 
-static char *help_content = NULL;
+const size_t commands_size = sizeof(commands) / sizeof *commands;
 
 void on_help(struct discord *client, const struct discord_message *msg) {
   if (msg->author->bot) return;
 
+  // help_content should be lazily evaluated
   if (!help_content) {
     // Precompute size of content
     size_t size = 0;
@@ -115,6 +129,7 @@ void on_help(struct discord *client, const struct discord_message *msg) {
     help_content = malloc(size + 1);
     size_t pos = 0;
     for (size_t i = 0; i < commands_size; i++) {
+      // Check if command usage has been defined
       if (commands[i].usage) {
         pos += sprintf(&help_content[pos], "`%s %s`: %s\n", commands[i].command,
                        commands[i].usage, commands[i].description);
@@ -131,37 +146,15 @@ void on_help(struct discord *client, const struct discord_message *msg) {
   discord_create_message(client, msg->channel_id, &params, NULL);
 }
 
-void set_commands(struct discord *client) {
+void commands_set(struct discord *client) {
   for (size_t i = 0; i < commands_size; i++) {
     discord_set_on_command(client, commands[i].command, commands[i].callback);
   }
+  // Add additional help command
   discord_set_on_command(client, "help", &on_help);
 }
 
-int main(int argc, char *argv[]) {
-  ccord_global_init();
-
-  struct discord *client =
-      discord_config_init((argc > 1) ? argv[1] : "config.json");
-  assert(client != NULL && "Could not initialize client");
-
-  gettimeofday(&start, NULL);
-
-  discord_set_on_ready(client, &on_ready);
-
-  set_commands(client);
-
-  const struct discord_user *bot = discord_get_self(client);
-  avatar_url = fetch_avatar_url(avatar_url, bot->id, bot->avatar);
-
-  struct utsname uname_data;
-  uname(&uname_data);
-  sprintf(system_info, "%s %s", uname_data.sysname, uname_data.release);
-
-  discord_run(client);
-
-  discord_cleanup(client);
-  ccord_global_cleanup();
-  free(avatar_url);
+void commands_free() {
+  free(command_data.avatar_url);
   free(help_content);
 }

@@ -1,4 +1,5 @@
 cbalc
 .env
 *.log
+obj/
 configdev.json
