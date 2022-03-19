@@ -1,10 +1,7 @@
-CONCORD = ./libs/concord
+CC ?= gcc
 
-INCLUDE_DIR := $(CONCORD)/include
-LIB_DIR := $(CONCORD)/lib
-
-CFLAGS += -I$(INCLUDE_DIR) -Wall -Wpedantic -Wextra
-LDFLAGS += -L$(LIB_DIR) $(pkg-config --libs --cflags libcurl) -lcurl
+CFLAGS += -pthread -Wall -Wpedantic -Wextra
+LDFLAGS += -ldiscord -lcurl
 
 cbalc: %: %.c
 	$(CC) $(CFLAGS) -o $@ $< -ldiscord $(LDFLAGS)
