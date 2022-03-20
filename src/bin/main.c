@@ -1,9 +1,5 @@
 #include <assert.h>
 #include <concord/discord.h>
-#include <inttypes.h>
-#include <stdio.h>
-#include <sys/time.h>
-#include <sys/utsname.h>
 
 #include "../commands.h"
 
