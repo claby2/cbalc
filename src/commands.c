@@ -35,9 +35,9 @@ static const size_t commands_size = sizeof(commands) / sizeof *commands;
 // Data that should be precomputed
 struct data {
   char *avatar_url;
-  char start_time[13];
   char *system_info;
   char *help_content;
+  time_t start;
 };
 
 static struct data command_data;
@@ -62,10 +62,33 @@ void on_echo(struct discord *client, const struct discord_message *msg) {
 void on_status(struct discord *client, const struct discord_message *msg) {
   if (msg->author->bot) return;
 
+  // Calculate uptime in seconds
+  unsigned long uptime = (unsigned long)(time(NULL) - command_data.start);
+  char *uptime_value;
+  unsigned long hours = uptime / 3600;
+  unsigned long minutes = (uptime / 60) % 60;
+  unsigned long seconds = uptime % 60;
+
+  char *hours_label, *minutes_label, *seconds_label;
+  hours_label = minutes_label = "";
+  if (hours > 0) {
+    cog_asprintf(&hours_label, "%lu %s, ", hours,
+                 hours == 1 ? "hour" : "hours");
+  }
+  if (minutes > 0) {
+    cog_asprintf(&minutes_label, "%lu %s, ", minutes,
+                 minutes == 1 ? "minute" : "minutes");
+  }
+  cog_asprintf(&seconds_label, "%lu %s", seconds,
+               seconds == 1 ? "second" : "seconds");
+  // Format uptime
+  cog_asprintf(&uptime_value, "%s%s%s", hours_label, minutes_label,
+               seconds_label);
+
   // Define embed fields
   struct discord_embed_field fields[] = {
       {.name = "System", .value = command_data.system_info},
-      {.name = "Start Time", .value = command_data.start_time},
+      {.name = "Uptime", .value = uptime_value},
   };
 
   struct discord_embed embeds[] = {{
@@ -143,13 +166,7 @@ void commands_data_init(const struct discord_user *bot) {
   cog_asprintf(&command_data.system_info, "%s %s", uname_data.sysname,
                uname_data.release);
 
-  struct timeval start;
-  gettimeofday(&start, NULL);
-  struct tm time;
-  // Use reentrant localtime
-  localtime_r(&start.tv_sec, &time);
-  strftime(command_data.start_time, sizeof(command_data.start_time),
-           "%b %d %H:%M", &time);
+  time(&command_data.start);
 
   generate_help_content(&command_data.help_content);
 }
