@@ -1,0 +1,7 @@
+cbalc
+*.log
+obj/
+
+Dockerfile
+config.json
+.git
