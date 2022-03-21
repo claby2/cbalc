@@ -1,6 +1,10 @@
-FROM alpine:3.12
+FROM ubuntu:latest
 
-RUN apk add --update --no-cache curl-dev git make gcc musl-dev
+RUN apt-get update
+RUN apt-get install -y \
+	build-essential \
+	git \
+	libcurl4-openssl-dev
 
 RUN git clone https://github.com/cogmasters/concord.git /app/concord
 WORKDIR /app/concord
