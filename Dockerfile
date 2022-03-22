@@ -1,10 +1,10 @@
 FROM ubuntu:latest
 
-RUN apt-get update
-RUN apt-get install -y \
+RUN apt-get update && apt-get install -y \
 	build-essential \
 	git \
-	libcurl4-openssl-dev
+	libcurl4-openssl-dev \
+	&& rm -rf /var/lib/apt/lists/*
 
 RUN git clone https://github.com/cogmasters/concord.git /app/concord
 WORKDIR /app/concord
