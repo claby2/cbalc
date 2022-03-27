@@ -1,0 +1,4 @@
+services:
+  cbalc:
+    build: .
+    restart: unless-stopped
